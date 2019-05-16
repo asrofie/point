@@ -6,7 +6,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Resources\ApiResource;
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\Api\HumanResource\Kpi\KpiAutomatedController;
 use App\Model\Project\Project;
 use App\Model\Master\User;
 use App\Model\HumanResource\Employee\Employee;
@@ -15,6 +14,7 @@ use App\Model\HumanResource\Employee\EmployeeSalaryAssessment;
 use App\Model\HumanResource\Employee\EmployeeSalaryAssessmentScore;
 use App\Model\HumanResource\Employee\EmployeeSalaryAssessmentTarget;
 use App\Model\HumanResource\Employee\EmployeeSalaryAchievement;
+use App\Model\HumanResource\Kpi\Automated;
 use App\Model\HumanResource\Kpi\Kpi;
 use App\Model\HumanResource\Kpi\KpiGroup;
 use App\Model\HumanResource\Kpi\KpiIndicator;
@@ -373,8 +373,6 @@ class EmployeeSalaryController extends Controller
         $kpis = $kpis->whereBetween('kpis.date', [$dateFrom, $dateTo]);
         $kpis = $kpis->where('employee_id', $employeeId)->orderBy('kpis.date', 'asc')->get();
 
-        $kpi_automated_controller = new KpiAutomatedController();
-
         $employee_assessment = [
             'indicators' => []
         ];
@@ -389,20 +387,11 @@ class EmployeeSalaryController extends Controller
                         $indicator_data['id'] = ++$indicatorIndex;
                         $indicator_data['name'] = $indicator->name;
                         $indicator_data['weight'] = $indicator->weight;
-
-                        if ($indicator->automated_id) {
-                            $data = $kpi_automated_controller->getAutomatedData($indicator->automated_id, $kpi->first_day_of_week, $kpi->last_day_of_week, $employeeId);
-                            $data_target = $kpi_automated_controller->getAutomatedData($indicator->automated_id, $kpi->last_day_of_week, $kpi->last_day_of_week, $employeeId);
-
-                            $indicator->target = $data_target['target'];
-                            $indicator->score = $data['score'];
-                        }
-
                         $indicator_data['target'][$kpi->week_of_month] = $indicator->target;
                         $indicator_data['score'][$kpi->week_of_month] = $indicator->score;
 
-                        if ($indicator->automated_id) {
-                            $indicator_data['automated_id'] = $indicator->automated_id;
+                        if ($indicator->automated_code) {
+                            $indicator_data['automated_code'] = $indicator->automated_code;
                             $indicator_data['employee_id'] = $kpi->employee_id;
                         }
 
@@ -411,30 +400,18 @@ class EmployeeSalaryController extends Controller
                     else {
                         $indicator_data = $employee_assessment['indicators'][$indicator->name];
 
-                        if ($indicator->automated_id) {
-                            $data = $kpi_automated_controller->getAutomatedData($indicator->automated_id, $kpi->first_day_of_week, $kpi->last_day_of_week, $employeeId);
-                            $data_target = $kpi_automated_controller->getAutomatedData($indicator->automated_id, $kpi->last_day_of_week, $kpi->last_day_of_week, $employeeId);
-
-                            $indicator->target = $data_target['target'];
-                            $indicator->score = $data['score'];
-                        }
-
                         if (!array_key_exists($kpi->week_of_month, $indicator_data['target'])) {
                             $indicator_data['target'][$kpi->week_of_month] = $indicator->target;
                         }
                         else {
-                            if (!$indicator->automated_id) {
-                                $indicator_data['target'][$kpi->week_of_month] += $indicator->target;
-                            }
+                            $indicator_data['target'][$kpi->week_of_month] += $indicator->target;
                         }
 
                         if (!array_key_exists($kpi->week_of_month, $indicator_data['score'])) {
                             $indicator_data['score'][$kpi->week_of_month] = $indicator->score;
                         }
                         else {
-                            if (!$indicator->automated_id) {
-                                $indicator_data['score'][$kpi->week_of_month] += $indicator->score;
-                            }
+                            $indicator_data['score'][$kpi->week_of_month] += $indicator->score;
                         }
 
                         $employee_assessment['indicators'][$indicator->name] = $indicator_data;
@@ -520,8 +497,6 @@ class EmployeeSalaryController extends Controller
         $dateFrom = date('Y-m-d', strtotime($request->startDate));
         $dateTo = date('Y-m-d', strtotime($request->endDate));
 
-        $kpi_automated_controller = new KpiAutomatedController();
-
         $employee_achievements = [
             'automated' => [
                 'balance' => [
@@ -592,8 +567,8 @@ class EmployeeSalaryController extends Controller
                 $assessmentData = $assessmentData['data']['indicators'];
 
                 foreach ($assessmentData as $assessment) {
-                    if (array_key_exists('automated_id', $assessment)) {
-                        if ($assessment['automated_id'] === 'C') {
+                    if (array_key_exists('automated_code', $assessment)) {
+                        if ($assessment['automated_code'] === 'C') {
                             if ($project->code === $project_code) {
                                 foreach ($employee_achievements['automated']['achievement_area_call'] as $week => &$data) {
                                     if ($week !== 'weight') {
@@ -616,7 +591,7 @@ class EmployeeSalaryController extends Controller
                                 }
                             }
                         }
-                        else if ($assessment['automated_id'] === 'EC') {
+                        else if ($assessment['automated_code'] === 'EC') {
                             if ($project->code === $project_code) {
                                 foreach ($employee_achievements['automated']['achievement_area_effective_call'] as $week => &$data) {
                                     if ($week !== 'weight') {
@@ -639,7 +614,7 @@ class EmployeeSalaryController extends Controller
                                 }
                             }
                         }
-                        else if ($assessment['automated_id'] === 'V') {
+                        else if ($assessment['automated_code'] === 'V') {
                             if ($project->code === $project_code) {
                                 foreach ($employee_achievements['automated']['achievement_area_value'] as $week => &$data) {
                                     if ($week !== 'weight') {
